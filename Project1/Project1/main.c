@@ -10,6 +10,7 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <avr/cpufunc.h>
+#include <stdbool.h>
 
 /* Use a struct to make the association between PORTs and bits connected to the LED array more explicit */
 struct LED_BITS
@@ -18,18 +19,9 @@ struct LED_BITS
 	uint8_t bit_mapping;
 };
 
-enum DIRECTION
-{
-	LEFT,
-	RIGHT
-};
-
 struct LED_BITS LED_Array[10] = {
 	{&PORTC, PIN5_bm}, {&PORTC, PIN4_bm}, {&PORTA, PIN0_bm}, {&PORTF, PIN5_bm}, {&PORTC, PIN6_bm}, {&PORTB, PIN2_bm}, {&PORTF, PIN4_bm}, {&PORTA, PIN1_bm}, {&PORTA, PIN2_bm}, {&PORTA, PIN3_bm}
 };
-
-uint8_t CURRENT_CYLON_LED = 0;		// Index of the current LED
-enum DIRECTION CURRENT_CYLON_DIRECTION = LEFT;
 
 void CLOCK_init (void);
 void InitialiseLED_PORT_bits(void);
@@ -125,27 +117,26 @@ void TCA0_init_bits(void)
 
 }
 
-void Toggle_Cylon_Direction() {
-	CURRENT_CYLON_DIRECTION = (CURRENT_CYLON_DIRECTION == LEFT) ? RIGHT : LEFT;
-}
-
 ISR(TCA0_OVF_vect)
 {
-	if (CURRENT_CYLON_DIRECTION == LEFT) 
+	static uint8_t i = 0;		// Index of the current LED
+	static bool direction = 1;	// direction of the cylon. 0 = left, 1 = right
+	
+	if (direction)
 	{
-		LED_Array[CURRENT_CYLON_LED].LED_PORT->OUTCLR = LED_Array[CURRENT_CYLON_LED].bit_mapping;
-		LED_Array[CURRENT_CYLON_LED+1].LED_PORT->OUTSET = LED_Array[CURRENT_CYLON_LED+1].bit_mapping;
-		CURRENT_CYLON_LED += 1;	
+		LED_Array[i].LED_PORT->OUTCLR = LED_Array[i].bit_mapping;
+		LED_Array[i+1].LED_PORT->OUTSET = LED_Array[i+1].bit_mapping;
+		i += 1;	
 	}
 	else 
 	{
-		LED_Array[CURRENT_CYLON_LED].LED_PORT->OUTCLR = LED_Array[CURRENT_CYLON_LED].bit_mapping;
-		LED_Array[CURRENT_CYLON_LED-1].LED_PORT->OUTSET = LED_Array[CURRENT_CYLON_LED-1].bit_mapping;
-		CURRENT_CYLON_LED -= 1;
+		LED_Array[i].LED_PORT->OUTCLR = LED_Array[i].bit_mapping;
+		LED_Array[i-1].LED_PORT->OUTSET = LED_Array[i-1].bit_mapping;
+		i -= 1;
 	}
 	
-	if (CURRENT_CYLON_LED >= 9 || CURRENT_CYLON_LED <= 0) {
-		Toggle_Cylon_Direction();
+	if (i >= 9 || i <= 0) {
+		direction = !direction;
 	}
 	
 	//Toggle_Ports();
