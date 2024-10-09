@@ -10,6 +10,14 @@
 #include <avr/cpufunc.h>
 #include <stdbool.h>
 
+enum MODES 
+{
+	VOLTAGE,
+	CYLON	
+};
+
+enum MODES DISPLAY_MODE = CYLON;
+
 /* Use a struct to make the association between PORTs and bits connected to the LED array more explicit */
 struct LED_BITS
 {
@@ -26,6 +34,9 @@ void set_leds_output(void);
 void set_clr_leds(bool set);
 void configure_TCA0(void);
 void configure_ADC0(void);
+void configure_button_input(void);
+void display_voltage(uint8_t);
+void configure_TCB0(void);
 
 int main(void)
 {
@@ -34,6 +45,8 @@ int main(void)
 	set_clr_leds(0); // ensure all leds are turned off by default
 	configure_TCA0();
 	configure_ADC0();
+	configure_button_input();
+	configure_TCB0();
 	
 	sei(); // Global interrupts enable
 	
@@ -67,13 +80,29 @@ void configure_TCA0(void)
 	TCA0.SINGLE.CTRLA = TCA_SINGLE_CLKSEL_DIV1024_gc | TCA_SINGLE_ENABLE_bm;	// Prescale set to /1024 and enable TCA0 (start count)
 }
 
+/* Enable and configure TCB0 */
+void configure_TCB0() 
+{
+	TCB0.CTRLA = TCB_CLKSEL_CLKDIV2_gc;
+	TCB0.CCMP = 0xFFFF;
+	TCB0.INTCTRL = TCB_CAPT_bm;
+	TCB0.CTRLA |= TCB_ENABLE_bm;
+}
+
 /* Enable and configure ADC0 */
 void configure_ADC0()
 {
-	ADC0.CTRLA = ADC_RESSEL_8BIT_gc | ADC_FREERUN_bm; // Set 8 bit resolution and freerun mode
+	ADC0.CTRLA = ADC_RESSEL_8BIT_gc | ADC_FREERUN_bm; // Set 8 bit resolution and free run mode
 	ADC0.CTRLC = VREF_AC0REFSEL_AVDD_gc | ADC_PRESC_DIV128_gc; // Set reference voltage to 5V and set ADC prescaler to div 128
-	ADC0.MUXPOS = ADC_MUXPOS_AIN3_gc; // set input to Analog in 3
+	ADC0.MUXPOS = ADC_MUXPOS_AIN3_gc; // Set input to Analog in 3
 	ADC0.CTRLA |= ADC_ENABLE_bm; // Enable ADC
+	ADC0.COMMAND = ADC_STCONV_bm; // Start first measurement
+}
+
+void configure_button_input()
+{
+	PORTE.DIRCLR = (1<<1); // Set port E pin 1 to input mode
+	PORTE.PIN1CTRL = PORT_PULLUPEN_bm | PORT_ISC_BOTHEDGES_gc; // Enable pull up resistor, set interrupt to both edges
 }
 
 /* Set or clear all LED port bits, 1 - set, 0 - clear */
@@ -93,10 +122,42 @@ void set_clr_leds(bool set) {
 	}
 }
 
+/* Display a number of leds as a bar (thermometer reading) */
+void display_voltage(uint8_t num_of_leds)
+{	
+	for (uint8_t i = 0; i <= num_of_leds; i++)
+	{
+		LED_Array[i].LED_PORT->OUTSET = LED_Array[i].bit_mapping;
+	}
+}
 
-/* Interrupt for cylon animation */
+/* button interrupt for voltage display */
+ISR(PORTE_PORT_vect) 
+{	
+	if ((PORTE.IN & (1<<1)) == 0) // Rising edge
+	{
+		DISPLAY_MODE = VOLTAGE;
+	}
+	else // Falling edge
+	{
+		DISPLAY_MODE = CYLON;
+		set_clr_leds(0);
+	}
+
+	PORTE.INTFLAGS = (1<<1);
+}
+
+/* Timer interrupt for cylon animation */
 ISR(TCA0_OVF_vect)
 {
+	TCA0.SINGLE.INTFLAGS = TCA_SINGLE_OVF_bm; // Clear interrupt flag
+	
+	// Do not show cylon animation unless in cylon mode
+	if (DISPLAY_MODE != CYLON)
+	{
+		return;
+	}
+		
 	static uint8_t i = 0;		// Index of the current LED
 	static bool direction = 1;	// direction of the cylon. 0 = left, 1 = right
 	
@@ -116,6 +177,16 @@ ISR(TCA0_OVF_vect)
 	if (i >= 9 || i <= 0) {
 		direction = !direction; // reverse direction
 	}
+}
+
+ISR(TCB0_INT_vect)
+{
+	if (DISPLAY_MODE == VOLTAGE)
+	{	
+		set_clr_leds(0);
+		int scaled_value = (ADC0.RES * 9) / 255; // scale the input value 0 - 255 to a value 0 - 9
+		display_voltage(scaled_value);
+	}
 	
-	TCA0.SINGLE.INTFLAGS = TCA_SINGLE_OVF_bm;
+	TCB0.INTFLAGS = TCB_CAPT_bm; // reset interrupt flag
 }
