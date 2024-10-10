@@ -10,6 +10,10 @@
 #include <avr/cpufunc.h>
 #include <stdbool.h>
 
+#define THREE_VOLT 153 // 3*255 /5 = 153
+#define EIGHT_S 2441 // 20Mhz => 0.05 uS, 0.05 * 1024 = 51.2 uS, 0.125 S = 125 000 uS, 125 000 / 51.2 ~2441 counts
+#define HALF_S 9766 // 20Mhz => 0.05 uS, 0.05 * 1024 = 51.2 uS, 0.5 S = 500 000 uS, 500 000 / 51.2 ~9766 counts
+
 enum MODES 
 {
 	VOLTAGE,
@@ -181,6 +185,17 @@ ISR(TCA0_OVF_vect)
 
 ISR(TCB0_INT_vect)
 {
+	// adjust speed of cylon based on voltage
+	if (ADC0.RESL <= THREE_VOLT) 
+	{
+		TCA0.SINGLE.PER = EIGHT_S;
+	}
+	else
+	{
+		TCA0.SINGLE.PER = HALF_S;
+	}
+	
+	// show voltage reading
 	if (DISPLAY_MODE == VOLTAGE)
 	{	
 		set_clr_leds(0);
