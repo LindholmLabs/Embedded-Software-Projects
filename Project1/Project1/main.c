@@ -31,7 +31,7 @@ enum MODES
 	SPLIT		// Show Cylon animation (half display, 5 LED:s) & voltage reading (half display, 5 LED:s) 
 };
 
-enum MODES DISPLAY_MODE = SPLIT;
+enum MODES DISPLAY_MODE = CYLON;
 
 
 /************************************************************************/
@@ -199,7 +199,7 @@ void display_voltage()
 	if (DISPLAY_MODE == SPLIT)
 	{
 		bot_led = SPLIT_LED + 1;										// Start from SPLIT_LED
-		top_led = sizeof(LED_Array) / sizeof(LED_Array[0]) - 1;				// Use LEDs from SPLIT_LED to the end
+		top_led = sizeof(LED_Array) / sizeof(LED_Array[0]) - 1;			// Use LEDs from SPLIT_LED to the end
 	}
 	else
 	{
@@ -207,7 +207,7 @@ void display_voltage()
 		top_led = sizeof(LED_Array) / sizeof(LED_Array[0]) - 1;
 	}
 
-	uint8_t n_leds = top_led - bot_led + 1;									// Number of LEDs used for voltage display
+	uint8_t n_leds = top_led - bot_led + 1;								// Number of LEDs used for voltage display
 
 	set_clr_leds_range(0, bot_led, top_led);							// Clear only the LEDs used for voltage display
 
