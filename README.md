@@ -25,3 +25,6 @@ A cylon is a sequential activation of the LED:s.
 
 ### Appendix 2: ATmega 4809
 For more information, see [datasheet](https://ww1.microchip.com/downloads/en/DeviceDoc/ATmega4808-4809-Data-Sheet-DS40002173A.pdf).
+
+### Appendix 3: Adapter board
+![Image of the board used for the projects](media/image_of_board_transparent.png)
