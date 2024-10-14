@@ -2,6 +2,9 @@
 ## Hardware
 For these projects, an Arduino Every with an ATmega4809 microcontroller was used. The microcontroller was mounted on a custom adapter board to allow compatibility with Arduino UNO R3 Shields. A custom board was attached to the adapter, which included 10 LEDs, 1 potentiometer, 2 buttons, and 1 variable frequency generator.
 
+## Software
+All software was written in C, using interrupts for all timer based features. 
+
 ## Project 1
 **Cylon animation with voltage reading**
 
