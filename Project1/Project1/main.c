@@ -244,6 +244,12 @@ void display_cylon()
 	// Switch off the current LED
 	LED_Array[i].LED_PORT->OUTCLR = LED_Array[i].bit_mapping;
 	
+	
+	if (i < bot_led || i > top_led)
+	{
+		i = bot_led;
+	}
+	
 	// Move to the next LED
 	i = direction ? i+1 : i-1;
 	
@@ -327,6 +333,7 @@ ISR(RTC_PIT_vect)
 {
 	if (DISPLAY_MODE == SPLIT) 
 	{
+		set_clr_leds(0); // Clear voltage reading after changing back to cylon mode
 		DISPLAY_MODE = CYLON;
 	}
 	else
