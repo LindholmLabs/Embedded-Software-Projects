@@ -123,7 +123,7 @@ void configure_TCA0(void)
 void configure_ADC0()
 {
 	ADC0.CTRLA = ADC_RESSEL_8BIT_gc | ADC_FREERUN_bm;							// Set 8 bit resolution and free run mode
-	ADC0.CTRLC = VREF_AC0REFSEL_AVDD_gc | ADC_PRESC_DIV128_gc;					// Set reference voltage to 5V and set ADC prescaler to div 128
+	ADC0.CTRLC = ADC_SAMPCAP_bm | ADC_REFSEL0_bm | ADC_PRESC_DIV128_gc;			// Enable SAMPCAP, Set reference voltage to 5V and set ADC prescaler to div 128
 	ADC0.MUXPOS = ADC_MUXPOS_AIN3_gc;											// Set input to Analog in 3
 	ADC0.INTCTRL = ADC_RESRDY_bm;												// Enable interrupt on result ready
 	ADC0.CTRLA |= ADC_ENABLE_bm;												// Enable ADC
