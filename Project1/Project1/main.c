@@ -11,25 +11,23 @@
 #include <avr/cpufunc.h>
 #include <stdbool.h>
 
-
-/************************************************************************/
-/* Precalculated Time & Voltage values									*/
-/************************************************************************/
+// Precalculated voltage and time values
 #define THREE_VOLT 614    // 3*1023 /5 = ~613
 #define EIGHT_S 2441    // 20Mhz => 0.05 uS, 0.05 * 1024 = 51.2 uS, 0.125 S = 125 000 uS, 125 000 / 51.2 ~2441 counts
 #define HALF_S 9766    // 20Mhz => 0.05 uS, 0.05 * 1024 = 51.2 uS, 0.5 S = 500 000 uS, 500 000 / 51.2 ~9766 counts
 
-#define SPLIT_LED 4    // When in split mode, split on led 4
+// decide on which led the cylon and thermometer are split
+#define SPLIT_LED 4    // only used when in split mode
 
 
 /************************************************************************/
-/* Global program modes                                                 */
+/* Global variables                                                     */
 /************************************************************************/
 enum MODES 
 {
 	VOLTAGE,    // Show voltage reading (full display; 10 LED:s)
 	CYLON,    // Show Cylon animation (full display; 10 LED:s)
-	SPLIT    // Show Cylon animation (half display, 5 LED:s) & voltage reading (half display, 5 LED:s) 
+	SPLIT    // Show Cylon animation and voltage reading (split based on SPLIT_LED)
 };
 
 enum MODES DISPLAY_MODE = CYLON;
@@ -39,7 +37,7 @@ uint16_t ADC_VALUE;
 
 
 /************************************************************************/
-/* LED PORT definitions													*/
+/* LED PORT definitions                                                 */
 /************************************************************************/
 struct LED_BITS
 {
@@ -54,6 +52,7 @@ struct LED_BITS LED_Array[10] = {
 // Precalculated values for non-split display are stored in precalculated_thresholds[0][0-9]
 // Precalculated values for non-split display are stored in precalculated_thresholds[1][0-9]
 uint16_t precalculated_thresholds[2][sizeof(LED_Array) / sizeof(LED_Array[0]) - 1];
+
 
 /************************************************************************/
 /* Function declarations                                                */
