@@ -20,6 +20,9 @@
 #include <stdbool.h>
 
 
+/// TODO
+// ENABLE EVENT CONTROLLED START CONVERSION FOR ADC
+
 /************************************************************************/
 /* Globals                                                              */
 /************************************************************************/
@@ -40,10 +43,15 @@ struct LED_BITS LED_Array[10] = {
 uint16_t qcntr = 0, sndcntr = 0;   /*indexes into the queue*/
 unsigned char queue[QUEUE_SIZE];       /*character queue*/
 
-/* Led related globals */
+/* ADC related globals */
 bool ADC_READING_READY;
 uint16_t ADC_VALUE;
 
+/* 555 Timer related globals */
+bool TIMER_READING_READY;
+uint16_t TCB0_HIGH_PULSE;
+uint16_t TCB0_LOW_PULSE;
+uint16_t TCB0_PERIOD;
 
 
 /************************************************************************/
@@ -53,10 +61,16 @@ void CLOCK_init (void);
 static void configure_USART3(void);
 void sendmsg (char *s);
 void configure_ADC0(void);
+void configure_EVSYS();
+void configure_TCB0(void);
+void print_tcb0_high_pulse(void);
+void print_tcb0_low_pulse(void);
 void print_adc_voltage(void);
 void print_adc_value(void);
 void print_available_commands(void);
+void print_tcb0_timer_period(void);
 bool queue_is_empty(void);
+
 
 
 int main(void)
@@ -67,10 +81,10 @@ int main(void)
 	// Flags
 	bool continuous_adc_reporting = false;
 	bool continuous_timer_reporting = false;
-	bool continuous_lowpulse_reporting = false;
-	bool continuous_highpulse_reporting = false;
 
 	CLOCK_init();
+	configure_EVSYS();
+	configure_TCB0();
     configure_USART3();
 	configure_ADC0();
 
@@ -83,9 +97,29 @@ int main(void)
 			ch = USART3.RXDATAL;
 			switch (ch)
 			{
+				case 'H':
+				case 'h':
+					print_tcb0_high_pulse();
+					break;
+				case 'L':
+				case 'l':
+					print_tcb0_low_pulse();
+					break;
+				case 'T':
+				case 't':
+					print_tcb0_timer_period();
+					break;
 				case 'A':
 				case 'a':
 					print_adc_value();
+					break;
+				case 'C':
+				case 'c':
+					continuous_timer_reporting = true;
+					break;
+				case 'E':
+				case 'e':
+					continuous_timer_reporting = false;
 					break;
 				case 'V':
 				case 'v':
@@ -108,13 +142,15 @@ int main(void)
 		}
 		
 		// Continuous reporting
-		if (continuous_adc_reporting)
+		if (continuous_adc_reporting && ADC_READING_READY && queue_is_empty())
 		{
-			if (ADC_READING_READY && queue_is_empty())
-			{
-				print_adc_voltage();
-				ADC_READING_READY = false;
-			}
+			print_adc_voltage();
+			ADC_READING_READY = false;
+		}
+		if (continuous_timer_reporting && TIMER_READING_READY && queue_is_empty())
+		{
+			print_tcb0_timer_period();
+			TIMER_READING_READY = false;
 		}
     }        
 }
@@ -124,6 +160,12 @@ void CLOCK_init (void)
 	/* Do not use low frequency clock, disable CLK_PER Prescaler */
 	ccp_write_io( (void *) &CLKCTRL.MCLKCTRLB , (0 << CLKCTRL_PEN_bp));
 	/* If set from the fuses during programming, the CPU will now run at 20MHz (default is /6) */
+}
+
+void configure_EVSYS()
+{
+	EVSYS.CHANNEL4 = EVSYS_GENERATOR_PORT0_PIN3_gc; // Select PE3 as event generator
+	EVSYS.USERTCB0 = EVSYS_CHANNEL_CHANNEL4_gc; // Select TCB0 as channel4 user
 }
 
 static void configure_USART3(void)
@@ -149,9 +191,20 @@ void configure_ADC0()
 	ADC0.CTRLC = ADC_SAMPCAP_bm | ADC_REFSEL_VDDREF_gc | ADC_PRESC_DIV64_gc;    // Enable SAMPCAP, Set reference voltage to VDD, Set ADC prescaler to div 128
 	ADC0.MUXPOS = ADC_MUXPOS_AIN3_gc;    // Set input to Analog in 3
 	ADC0.INTCTRL = ADC_RESRDY_bm;    // Enable interrupt on result ready
-	ADC0.CTRLD = ADC_INITDLY_DLY16_gc;    // Initial delay of 16 cycles
+	ADC0.CTRLD = ADC_INITDLY_DLY0_gc;    // Initial delay of 0 cycles
 	ADC0.CTRLA |= ADC_ENABLE_bm;    // Enable ADC
 	ADC0.COMMAND = ADC_STCONV_bm;    // Start first measurement
+}
+
+/************************************************************************/
+/* Enable and configure TCB0 for PW measurement                   */
+/************************************************************************/
+void configure_TCB0() 
+{
+	TCB0.CTRLA = TCB_CLKSEL_CLKDIV2_gc | TCB_ENABLE_bm; // Select CLK_PER/2 source and enable
+	TCB0.CTRLB = TCB_CNTMODE_FRQPW_gc; // Set mode to PW measurment mode
+	TCB0.INTCTRL = TCB_CAPT_bm; // Capture Interrupt Enable
+	TCB0.EVCTRL = (1<<TCB_EDGE_bp) | (1<<TCB_CAPTEI_bp); // Event on falling edge & enable capture event input
 }
 
 /*this function loads the queue and */
@@ -221,6 +274,30 @@ void print_adc_value()
 	sendmsg(str_buffer);
 }
 
+/************************************************************************/
+/* Printing of 555 timer information                                    */
+/************************************************************************/
+void print_tcb0_high_pulse()
+{
+	char	str_buffer[16];
+	sprintf(str_buffer, "Low = %dmS\n", TCB0_LOW_PULSE);
+	sendmsg(str_buffer);
+}
+
+void print_tcb0_low_pulse() 
+{
+	char	str_buffer[16];
+	sprintf(str_buffer, "High = %dmS\n", TCB0_HIGH_PULSE);
+	sendmsg(str_buffer);
+}
+
+void print_tcb0_timer_period()
+{
+	char	str_buffer[16];
+	sprintf(str_buffer, "Timer = %dmS\n", TCB0_PERIOD);
+	sendmsg(str_buffer);
+}
+
 // Print the available commands 
 void print_available_commands()
 {
@@ -270,4 +347,20 @@ ISR(ADC0_RESRDY_vect)
 	ADC_READING_READY = true;    // Set flag informing that new voltage value is ready
 	ADC_VALUE = ADC0.RES;    // Store the reading of the ADC result in a global variable
 	ADC0.INTFLAGS = ADC_RESRDY_bm;    // Clear interrupt flag
+}
+
+
+ISR(TCB0_INT_vect)
+{
+	TCB0.INTFLAGS = 1; // Reset interrupt flag
+	uint16_t ccmp = TCB0.CCMP;
+	uint16_t cnt = TCB0.CNT;
+	
+	// 1 / 1MHz = 0.1uS per tick
+	TCB0_PERIOD = 0.1 * cnt; // calculate timer period in uS 
+	
+	TCB0_LOW_PULSE = 0.1 * ccmp;
+	TCB0_HIGH_PULSE = 0.1 * (cnt - ccmp);
+	
+	TIMER_READING_READY = true;
 }
