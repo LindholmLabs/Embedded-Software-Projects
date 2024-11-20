@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdbool.h>
+#include <ctype.h>
 
 
 /// TODO
@@ -63,8 +64,8 @@ void sendmsg (char *s);
 void configure_ADC0(void);
 void configure_EVSYS();
 void configure_TCB0(void);
-void print_tcb0_high_pulse(void);
 void print_tcb0_low_pulse(void);
+void print_tcb0_high_pulse(void);
 void print_adc_voltage(void);
 void print_adc_value(void);
 void print_available_commands(void);
@@ -95,50 +96,63 @@ int main(void)
         if (USART3.STATUS & USART_RXCIF_bm)
 		{	/* If a character has been received, read it - this structure allows other code to run */
 			ch = USART3.RXDATAL;
-			switch (ch)
+			
+			// if received character is a digit
+			if (isdigit(ch))
 			{
-				case 'H':
-				case 'h':
-					print_tcb0_high_pulse();
-					break;
-				case 'L':
-				case 'l':
-					print_tcb0_low_pulse();
-					break;
-				case 'T':
-				case 't':
-					print_tcb0_timer_period();
-					break;
-				case 'A':
-				case 'a':
-					print_adc_value();
-					break;
-				case 'C':
-				case 'c':
-					continuous_timer_reporting = true;
-					break;
-				case 'E':
-				case 'e':
-					continuous_timer_reporting = false;
-					break;
-				case 'V':
-				case 'v':
-					print_adc_voltage();
-					break;
-				case 'M': // Start continuous reporting of ADC voltage in mV
-				case 'm':
-					continuous_adc_reporting = true;
-					break;
-				case 'N': // Stop continuous reporting of ADC
-				case 'n':
-					continuous_adc_reporting = false;
-					sprintf(str_buffer, "Stopped\n");
-					sendmsg(str_buffer);
-					break;
-				default:
-					print_available_commands();
-					break;
+				char	str_buffer[16];
+				sprintf(str_buffer, "received %c", ch);
+				sendmsg(str_buffer);
 			}
+			else 
+			{
+				// if received character is a letter
+				switch (ch)
+				{
+					case 'L':
+					case 'l':
+						print_tcb0_low_pulse();
+						break;
+					case 'H':
+					case 'h':
+						print_tcb0_high_pulse();
+						break;
+					case 'T':
+					case 't':
+						print_tcb0_timer_period();
+						break;
+					case 'A':
+					case 'a':
+						print_adc_value();
+						break;
+					case 'C':
+					case 'c':
+						continuous_timer_reporting = true;
+						break;
+					case 'E':
+					case 'e':
+						continuous_timer_reporting = false;
+						break;
+					case 'V': // print ADC voltage
+					case 'v':
+						print_adc_voltage();
+						break;
+					case 'M': // Start continuous reporting of ADC voltage in mV
+					case 'm':
+						continuous_adc_reporting = true;
+						break;
+					case 'N': // Stop continuous reporting of ADC
+					case 'n':
+						continuous_adc_reporting = false;
+						sprintf(str_buffer, "Stopped\n");
+						sendmsg(str_buffer);
+						break;
+					default:
+						print_available_commands();
+						break;
+				}
+			}
+			
 		}
 		
 		// Continuous reporting
@@ -201,6 +215,7 @@ void configure_ADC0()
 /************************************************************************/
 void configure_TCB0() 
 {
+	// Event on falling edge to increase resolution for high pulse
 	TCB0.CTRLA = TCB_CLKSEL_CLKDIV2_gc | TCB_ENABLE_bm; // Select CLK_PER/2 source and enable
 	TCB0.CTRLB = TCB_CNTMODE_FRQPW_gc; // Set mode to PW measurment mode
 	TCB0.INTCTRL = TCB_CAPT_bm; // Capture Interrupt Enable
@@ -277,14 +292,14 @@ void print_adc_value()
 /************************************************************************/
 /* Printing of 555 timer information                                    */
 /************************************************************************/
-void print_tcb0_high_pulse()
+void print_tcb0_low_pulse()
 {
 	char	str_buffer[16];
 	sprintf(str_buffer, "Low = %dmS\n", TCB0_LOW_PULSE);
 	sendmsg(str_buffer);
 }
 
-void print_tcb0_low_pulse() 
+void print_tcb0_high_pulse() 
 {
 	char	str_buffer[16];
 	sprintf(str_buffer, "High = %dmS\n", TCB0_HIGH_PULSE);
