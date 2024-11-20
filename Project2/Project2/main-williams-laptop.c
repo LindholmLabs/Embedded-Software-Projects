@@ -54,9 +54,6 @@ uint16_t TCB0_HIGH_PULSE;
 uint16_t TCB0_LOW_PULSE;
 uint16_t TCB0_PERIOD;
 
-/* Servo related globals */
-uint8_t SERVO_SPEED;
-
 
 /************************************************************************/
 /* Function declarations                                                */
@@ -66,13 +63,9 @@ static void configure_USART3(void);
 void sendmsg (char *s);
 void configure_ADC0(void);
 void configure_EVSYS();
-void configure_TCA0();
 void configure_TCB0(void);
-void configure_TCB1(void);
-void configure_TCB2(void);
-
-void print_tcb0_low_pulse(void);
 void print_tcb0_high_pulse(void);
+void print_tcb0_low_pulse(void);
 void print_adc_voltage(void);
 void print_adc_value(void);
 void print_available_commands(void);
@@ -93,11 +86,8 @@ int main(void)
 	CLOCK_init();
 	configure_EVSYS();
 	configure_TCB0();
-	configure_TCB1();
     configure_USART3();
-	configure_TCB2();
 	configure_ADC0();
-	configure_TCA0();
 
     sei(); /* Enable Global Interrupts */
     
@@ -110,60 +100,56 @@ int main(void)
 			// if received character is a digit
 			if (isdigit(ch))
 			{
-				char	str_buffer[32];
-				sprintf(str_buffer, "Set Servo speed to  %c", ch);
+				char	str_buffer[16];
+				sprintf(str_buffer, "received %c", ch);
 				sendmsg(str_buffer);
-				SERVO_SPEED = ch - '0'; // Convert to integer representation in ASCII
-			}
-			else 
-			{
-				// if received character is a letter
-				switch (ch)
-				{
-					case 'L':
-					case 'l':
-						print_tcb0_low_pulse();
-						break;
-					case 'H':
-					case 'h':
-						print_tcb0_high_pulse();
-						break;
-					case 'T':
-					case 't':
-						print_tcb0_timer_period();
-						break;
-					case 'A':
-					case 'a':
-						print_adc_value();
-						break;
-					case 'C':
-					case 'c':
-						continuous_timer_reporting = true;
-						break;
-					case 'E':
-					case 'e':
-						continuous_timer_reporting = false;
-						break;
-					case 'V': // print ADC voltage
-					case 'v':
-						print_adc_voltage();
-						break;
-					case 'M': // Start continuous reporting of ADC voltage in mV
-					case 'm':
-						continuous_adc_reporting = true;
-						break;
-					case 'N': // Stop continuous reporting of ADC
-					case 'n':
-						continuous_adc_reporting = false;
-						sprintf(str_buffer, "Stopped\n");
-						sendmsg(str_buffer);
-						break;
-					default:
-						print_available_commands();
-						break;
-				}
 			}
 			
+			// if received character is a letter
+			switch (ch)
+			{
+				case 'H':
+				case 'h':
+					print_tcb0_high_pulse();
+					break;
+				case 'L':
+				case 'l':
+					print_tcb0_low_pulse();
+					break;
+				case 'T':
+				case 't':
+					print_tcb0_timer_period();
+					break;
+				case 'A':
+				case 'a':
+					print_adc_value();
+					break;
+				case 'C':
+				case 'c':
+					continuous_timer_reporting = true;
+					break;
+				case 'E':
+				case 'e':
+					continuous_timer_reporting = false;
+					break;
+				case 'V': // print ADC voltage
+				case 'v':
+					print_adc_voltage();
+					break;
+				case 'M': // Start continuous reporting of ADC voltage in mV
+				case 'm':
+					continuous_adc_reporting = true;
+					break;
+				case 'N': // Stop continuous reporting of ADC
+				case 'n':
+					continuous_adc_reporting = false;
+					sprintf(str_buffer, "Stopped\n");
+					sendmsg(str_buffer);
+					break;
+				default:
+					print_available_commands();
+					break;
+			}
 		}
 		
 		// Continuous reporting
@@ -180,6 +166,11 @@ int main(void)
     }        
 }
 
+void handle_character_instructions()
+{
+	
+}
+
 void CLOCK_init (void)
 {
 	/* Do not use low frequency clock, disable CLK_PER Prescaler */
@@ -189,14 +180,8 @@ void CLOCK_init (void)
 
 void configure_EVSYS()
 {
-	// Set TCB0 to measure PW from PE3
 	EVSYS.CHANNEL4 = EVSYS_GENERATOR_PORT0_PIN3_gc; // Select PE3 as event generator
 	EVSYS.USERTCB0 = EVSYS_CHANNEL_CHANNEL4_gc; // Select TCB0 as channel4 user
-	EVSYS.USERTCB1 = EVSYS_CHANNEL_CHANNEL4_gc; // Select TCB1 as channel4 user
-	
-	// Set ADC0 to measure when called by TCB2
-	EVSYS.CHANNEL2 = EVSYS_GENERATOR_TCB2_CAPT_gc;
-	EVSYS.USERADC0 = EVSYS_CHANNEL_CHANNEL2_gc;
 }
 
 static void configure_USART3(void)
@@ -218,13 +203,13 @@ static void configure_USART3(void)
 /************************************************************************/
 void configure_ADC0()
 {
-	ADC0.CTRLA = ADC_RESSEL_10BIT_gc;    // Set 10 bit resolution
-	ADC0.EVCTRL = ADC_STARTEI_bm; // Enable event controlled start conversion
-	ADC0.CTRLC = ADC_SAMPCAP_bm | ADC_REFSEL_VDDREF_gc | ADC_PRESC_DIV64_gc;    // Enable SAMPCAP, Set reference voltage to VDD, Set ADC prescaler to div 64
+	ADC0.CTRLA = ADC_RESSEL_10BIT_gc | ADC_FREERUN_bm;    // Set 10 bit resolution and free run mode
+	ADC0.CTRLC = ADC_SAMPCAP_bm | ADC_REFSEL_VDDREF_gc | ADC_PRESC_DIV64_gc;    // Enable SAMPCAP, Set reference voltage to VDD, Set ADC prescaler to div 128
 	ADC0.MUXPOS = ADC_MUXPOS_AIN3_gc;    // Set input to Analog in 3
 	ADC0.INTCTRL = ADC_RESRDY_bm;    // Enable interrupt on result ready
 	ADC0.CTRLD = ADC_INITDLY_DLY0_gc;    // Initial delay of 0 cycles
 	ADC0.CTRLA |= ADC_ENABLE_bm;    // Enable ADC
+	ADC0.COMMAND = ADC_STCONV_bm;    // Start first measurement
 }
 
 /************************************************************************/
@@ -232,49 +217,10 @@ void configure_ADC0()
 /************************************************************************/
 void configure_TCB0() 
 {
-	// Event on falling edge to increase resolution for high pulse
 	TCB0.CTRLA = TCB_CLKSEL_CLKDIV2_gc | TCB_ENABLE_bm; // Select CLK_PER/2 source and enable
 	TCB0.CTRLB = TCB_CNTMODE_FRQPW_gc; // Set mode to PW measurment mode
 	TCB0.INTCTRL = TCB_CAPT_bm; // Capture Interrupt Enable
 	TCB0.EVCTRL = (1<<TCB_EDGE_bp) | (1<<TCB_CAPTEI_bp); // Event on falling edge & enable capture event input
-}
-
-/************************************************************************/
-/* Enable and configure TCB1 for timer stop detection                   */
-/************************************************************************/
-void configure_TCB1()
-{
-	// Configure TCB1 to start counting on falling edge.
-	// And timeout if value reaches top before next rising edge.
-	// (Detect if oscillation stopped on 555 timer)
-	// (Configured as PE3 event user)
-	TCB1.CTRLA = TCB_CLKSEL_CLKDIV2_gc | TCB_ENABLE_bm; // set clock source to CLP_PER / 2 and enable
-	TCB1.CTRLB = TCB_CNTMODE_TIMEOUT_gc; // Enable timeout check mode
-	TCB1.INTCTRL = TCB_CAPT_bm; // Capture Interrupt Enable
-	TCB1.CCMP = 65535;
-	TCB1.EVCTRL = (1<<TCB_EDGE_bp) | (1<<TCB_CAPTEI_bp); // Event on falling edge & enable capture event input
-}
-
-/************************************************************************/
-/* Enable and configure TCB2                                            */
-/************************************************************************/
-void configure_TCB2()
-{
-	TCB2.CTRLA = TCB_CLKSEL_CLKDIV2_gc | TCB_ENABLE_bm; // set clock source to CLP_PER / 2 and enable
-	TCB2.CTRLB = TCB_CNTMODE_INT_gc; // enable periodic interrupt mode (this is default)
-	TCB2.INTCTRL = TCB_CAPT_bm; // Capture Interrupt Enable
-	TCB2.CCMP = 50000; // (5*10^-3)/(1/(10*10^6)) = 50000 -> 5mS
-}
-
-void configure_TCA0()
-{
-	TCA0.SINGLE.CTRLA = TCA_SINGLE_CLKSEL_DIV16_gc; // Set clock to clock peripheral with div 16 prescaler
-	TCA0.SINGLE.CTRLB = TCA_SINGLE_CMP0EN_bm | TCA_SINGLE_WGMODE_SINGLESLOPE_gc; // W0-0 output and single slope PWM mode
-	TCA0.SINGLE.PER = 24999; // Set to 50Hz PWM frequency, 20mS
-	TCA0.SINGLE.CMP0 = 1250; // Set to 1mS, -90 deg
-	TCA0.SINGLE.CTRLA |= TCA_SINGLE_ENABLE_bm; // Enable TCA0
-	PORTA.DIRSET = PIN0_bm; // Set PA0 as output
-	
 }
 
 /*this function loads the queue and */
@@ -347,14 +293,14 @@ void print_adc_value()
 /************************************************************************/
 /* Printing of 555 timer information                                    */
 /************************************************************************/
-void print_tcb0_low_pulse()
+void print_tcb0_high_pulse()
 {
 	char	str_buffer[16];
 	sprintf(str_buffer, "Low = %dmS\n", TCB0_LOW_PULSE);
 	sendmsg(str_buffer);
 }
 
-void print_tcb0_high_pulse() 
+void print_tcb0_low_pulse() 
 {
 	char	str_buffer[16];
 	sprintf(str_buffer, "High = %dmS\n", TCB0_HIGH_PULSE);
@@ -433,18 +379,4 @@ ISR(TCB0_INT_vect)
 	TCB0_HIGH_PULSE = 0.1 * (cnt - ccmp);
 	
 	TIMER_READING_READY = true;
-}
-
-ISR(TCB1_INT_vect)
-{
-	TCB1.INTFLAGS = 1; // Reset interrupt flag
-	char	str_buffer[16];
-	sprintf(str_buffer, "STOPPED\n");
-	sendmsg(str_buffer);
-}
-
-ISR(TCB2_INT_vect)
-{
-	uint16_t servo_pos = 1250 + ((1250 * (uint16_t)SERVO_SPEED)/10);
-	TCA0.SINGLE.CMP0BUF = servo_pos;
 }
