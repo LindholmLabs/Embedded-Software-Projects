@@ -64,6 +64,8 @@ void sendmsg (char *s);
 void configure_ADC0(void);
 void configure_EVSYS();
 void configure_TCB0(void);
+void configure_TCB2(void);
+
 void print_tcb0_low_pulse(void);
 void print_tcb0_high_pulse(void);
 void print_adc_voltage(void);
@@ -87,6 +89,7 @@ int main(void)
 	configure_EVSYS();
 	configure_TCB0();
     configure_USART3();
+	configure_TCB2();
 	configure_ADC0();
 
     sei(); /* Enable Global Interrupts */
@@ -178,8 +181,13 @@ void CLOCK_init (void)
 
 void configure_EVSYS()
 {
+	// Set TCB0 to measure PW from PE3
 	EVSYS.CHANNEL4 = EVSYS_GENERATOR_PORT0_PIN3_gc; // Select PE3 as event generator
 	EVSYS.USERTCB0 = EVSYS_CHANNEL_CHANNEL4_gc; // Select TCB0 as channel4 user
+	
+	// Set ADC0 to measure when called by TCB2
+	EVSYS.CHANNEL2 = EVSYS_GENERATOR_TCB2_CAPT_gc;
+	EVSYS.USERADC0 = EVSYS_CHANNEL_CHANNEL2_gc;
 }
 
 static void configure_USART3(void)
@@ -201,13 +209,13 @@ static void configure_USART3(void)
 /************************************************************************/
 void configure_ADC0()
 {
-	ADC0.CTRLA = ADC_RESSEL_10BIT_gc | ADC_FREERUN_bm;    // Set 10 bit resolution and free run mode
-	ADC0.CTRLC = ADC_SAMPCAP_bm | ADC_REFSEL_VDDREF_gc | ADC_PRESC_DIV64_gc;    // Enable SAMPCAP, Set reference voltage to VDD, Set ADC prescaler to div 128
+	ADC0.CTRLA = ADC_RESSEL_10BIT_gc;    // Set 10 bit resolution
+	ADC0.EVCTRL = ADC_STARTEI_bm; // Enable event controlled start conversion
+	ADC0.CTRLC = ADC_SAMPCAP_bm | ADC_REFSEL_VDDREF_gc | ADC_PRESC_DIV64_gc;    // Enable SAMPCAP, Set reference voltage to VDD, Set ADC prescaler to div 64
 	ADC0.MUXPOS = ADC_MUXPOS_AIN3_gc;    // Set input to Analog in 3
 	ADC0.INTCTRL = ADC_RESRDY_bm;    // Enable interrupt on result ready
 	ADC0.CTRLD = ADC_INITDLY_DLY0_gc;    // Initial delay of 0 cycles
 	ADC0.CTRLA |= ADC_ENABLE_bm;    // Enable ADC
-	ADC0.COMMAND = ADC_STCONV_bm;    // Start first measurement
 }
 
 /************************************************************************/
@@ -220,6 +228,17 @@ void configure_TCB0()
 	TCB0.CTRLB = TCB_CNTMODE_FRQPW_gc; // Set mode to PW measurment mode
 	TCB0.INTCTRL = TCB_CAPT_bm; // Capture Interrupt Enable
 	TCB0.EVCTRL = (1<<TCB_EDGE_bp) | (1<<TCB_CAPTEI_bp); // Event on falling edge & enable capture event input
+}
+
+/************************************************************************/
+/* Enable and configure TCB2                                            */
+/************************************************************************/
+void configure_TCB2()
+{
+	TCB2.CTRLA = TCB_CLKSEL_CLKDIV2_gc | TCB_ENABLE_bm; // set clock source to CLP_PER / 2 and enable
+	TCB2.CTRLB = TCB_CNTMODE_INT_gc; // enable periodic interrupt mode (this is default)
+	TCB2.INTCTRL = TCB_CAPT_bm; // Capture Interrupt Enable
+	TCB2.CCMP = 50000; // (5*10^-3)/(1/(10*10^6)) = 50000 -> 5mS
 }
 
 /*this function loads the queue and */
@@ -378,4 +397,9 @@ ISR(TCB0_INT_vect)
 	TCB0_HIGH_PULSE = 0.1 * (cnt - ccmp);
 	
 	TIMER_READING_READY = true;
+}
+
+ISR(TCB2_INT_vect)
+{
+	//TODO
 }
