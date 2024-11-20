@@ -64,6 +64,7 @@ void sendmsg (char *s);
 void configure_ADC0(void);
 void configure_EVSYS();
 void configure_TCB0(void);
+void configure_TCB1(void);
 void configure_TCB2(void);
 
 void print_tcb0_low_pulse(void);
@@ -88,6 +89,7 @@ int main(void)
 	CLOCK_init();
 	configure_EVSYS();
 	configure_TCB0();
+	configure_TCB1();
     configure_USART3();
 	configure_TCB2();
 	configure_ADC0();
@@ -184,6 +186,7 @@ void configure_EVSYS()
 	// Set TCB0 to measure PW from PE3
 	EVSYS.CHANNEL4 = EVSYS_GENERATOR_PORT0_PIN3_gc; // Select PE3 as event generator
 	EVSYS.USERTCB0 = EVSYS_CHANNEL_CHANNEL4_gc; // Select TCB0 as channel4 user
+	EVSYS.USERTCB1 = EVSYS_CHANNEL_CHANNEL4_gc; // Select TCB1 as channel4 user
 	
 	// Set ADC0 to measure when called by TCB2
 	EVSYS.CHANNEL2 = EVSYS_GENERATOR_TCB2_CAPT_gc;
@@ -228,6 +231,22 @@ void configure_TCB0()
 	TCB0.CTRLB = TCB_CNTMODE_FRQPW_gc; // Set mode to PW measurment mode
 	TCB0.INTCTRL = TCB_CAPT_bm; // Capture Interrupt Enable
 	TCB0.EVCTRL = (1<<TCB_EDGE_bp) | (1<<TCB_CAPTEI_bp); // Event on falling edge & enable capture event input
+}
+
+/************************************************************************/
+/* Enable and configure TCB1 for timer stop detection                   */
+/************************************************************************/
+void configure_TCB1()
+{
+	// Configure TCB1 to start counting on falling edge.
+	// And timeout if value reaches top before next rising edge.
+	// (Detect if oscillation stopped on 555 timer)
+	// (Configured as PE3 event user)
+	TCB1.CTRLA = TCB_CLKSEL_CLKDIV2_gc | TCB_ENABLE_bm; // set clock source to CLP_PER / 2 and enable
+	TCB1.CTRLB = TCB_CNTMODE_TIMEOUT_gc; // Enable timeout check mode
+	TCB1.INTCTRL = TCB_CAPT_bm; // Capture Interrupt Enable
+	TCB1.CCMP = 65000;
+	TCB1.EVCTRL = (1<<TCB_EDGE_bp) | (1<<TCB_CAPTEI_bp); // Event on falling edge & enable capture event input
 }
 
 /************************************************************************/
@@ -397,6 +416,14 @@ ISR(TCB0_INT_vect)
 	TCB0_HIGH_PULSE = 0.1 * (cnt - ccmp);
 	
 	TIMER_READING_READY = true;
+}
+
+ISR(TCB1_INT_vect)
+{
+	TCB1.INTFLAGS = 1; // Reset interrupt flag
+	char	str_buffer[16];
+	sprintf(str_buffer, "STOPPED\n");
+	sendmsg(str_buffer);
 }
 
 ISR(TCB2_INT_vect)
