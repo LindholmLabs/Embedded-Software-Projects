@@ -77,6 +77,7 @@ void print_adc_voltage(void);
 void print_adc_value(void);
 void print_available_commands(void);
 void print_tcb0_timer_period(void);
+int16_t calculate_servo_move_threshold(void);
 bool queue_is_empty(void);
 
 
@@ -110,8 +111,8 @@ int main(void)
 			// if received character is a digit
 			if (isdigit(ch))
 			{
-				char	str_buffer[32];
-				sprintf(str_buffer, "Set Servo speed to  %c", ch);
+				char	str_buffer[16];
+				sprintf(str_buffer, "Speed: %c\n", ch);
 				sendmsg(str_buffer);
 				SERVO_SPEED = ch - '0'; // Convert to integer representation in ASCII
 			}
@@ -395,6 +396,34 @@ void print_available_commands()
 	sendmsg(str_buffer);
 }
 
+int16_t calculate_servo_move_threshold() {
+	switch (SERVO_SPEED)
+	{
+		case 0:
+			return -1;
+		case 1: // 1 / 5*10^-3 = 200
+			return 200;
+		case 2: // 0.75 / 5*10^-3 = 150
+			return 150;
+		case 3: // 0.5 / 5*10^-3 = 100
+			return 100;
+		case 4: // 0.4 / 5*10^-3 = 80
+			return 80;
+		case 5: // 0.25 / 5*10^-3 = 50
+			return 50;
+		case 6: // 0.2 / 5*10^-3 = 40
+			return 40;
+		case 7: // 0.15 / 5*10^-3 = 30
+			return 30;
+		case 8: // 0.1 / 5*10^-3 = 20
+			return 20;
+		case 9: // 0.05 / 5*10^-3 = 10
+			return 10;
+		default:
+			return -1;
+	}
+}
+
 ISR(USART3_TXC_vect)
 {
 	 // Clear the transmit complete flag
@@ -445,6 +474,38 @@ ISR(TCB1_INT_vect)
 
 ISR(TCB2_INT_vect)
 {
-	uint16_t servo_pos = 1250 + ((1250 * (uint16_t)SERVO_SPEED)/10);
-	TCA0.SINGLE.CMP0BUF = servo_pos;
+	TCB2.INTFLAGS = 1; // clear interrupt flag
+
+	static uint16_t sw_counter = 0; // software counter, decides when to increment desired_pos
+	static uint8_t desired_pos = 0; // (value: 0 - 25)
+	static uint32_t desired_step;
+	desired_step = 700 + ((2700 * (uint32_t)desired_pos)/25); // calculate next desired step (value: 1250-2500)
+	static int8_t direction = 1;
+	
+	sw_counter++;
+	
+	if (desired_pos == 25)
+	{
+		direction = -1;
+	} 
+	else if (desired_pos == 0) 
+	{
+		direction = 1;	
+	}
+	
+	int16_t threshold = calculate_servo_move_threshold();
+	
+	if (threshold == -1) { // no movement
+		return;
+	} 
+	else if (sw_counter > threshold)
+	{
+		char	str_buffer[16];
+		sprintf(str_buffer, "to %lu\n", desired_step);
+		sendmsg(str_buffer);
+		sw_counter = 0;
+		desired_pos += direction;
+	}
+	
+	TCA0.SINGLE.CMP0BUF = desired_step;
 }
