@@ -376,6 +376,7 @@ void print_available_commands()
 	sprintf(
 		str_buffer,
 		"Undefined instruction.\n"
+		"0 - 9 = Servo speed\n"
 		"A/a = ADC value.\n"
 		"V/v = ADC voltage reading (mV).\n"
 		"M/m = Continuous ADC reporting (mV).\n"
@@ -396,32 +397,10 @@ void print_available_commands()
 	sendmsg(str_buffer);
 }
 
-int16_t calculate_servo_move_threshold() {
-	switch (SERVO_SPEED)
-	{
-		case 0:
-			return -1;
-		case 1: // 1 / 5*10^-3 = 200
-			return 200;
-		case 2: // 0.75 / 5*10^-3 = 150
-			return 150;
-		case 3: // 0.5 / 5*10^-3 = 100
-			return 100;
-		case 4: // 0.4 / 5*10^-3 = 80
-			return 80;
-		case 5: // 0.25 / 5*10^-3 = 50
-			return 50;
-		case 6: // 0.2 / 5*10^-3 = 40
-			return 40;
-		case 7: // 0.15 / 5*10^-3 = 30
-			return 30;
-		case 8: // 0.1 / 5*10^-3 = 20
-			return 20;
-		case 9: // 0.05 / 5*10^-3 = 10
-			return 10;
-		default:
-			return -1;
-	}
+int16_t calculate_servo_move_threshold() 
+{
+	static const int16_t speed_values[] = {-1, 200, 150, 100, 80, 50, 40, 30, 20, 10};
+	return speed_values[SERVO_SPEED];
 }
 
 ISR(USART3_TXC_vect)
