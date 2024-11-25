@@ -10,8 +10,7 @@
 #define BAUD_RATE 115200
 #define QUEUE_SIZE 512
 
-#define MIN_SERVO_PW 
-#define MAX_SERVO_PW
+#define ADC_35V 716 // ((2^10)-1)*(3.5V/5V) = 716.1
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -456,6 +455,11 @@ ISR(ADC0_RESRDY_vect)
 	ADC_READING_READY = true;    // Set flag informing that new voltage value is ready
 	ADC_VALUE = ADC0.RES;    // Store the reading of the ADC result in a global variable
 	ADC0.INTFLAGS = ADC_RESRDY_bm;    // Clear interrupt flag
+	
+	if (ADC_VALUE > ADC_35V)
+		LED_Array[7].LED_PORT->OUTSET = LED_Array[7].bit_mapping; // turn on LED 7
+	else
+		LED_Array[7].LED_PORT->OUTCLR = LED_Array[7].bit_mapping; // turn off LED 7
 }
 
 
