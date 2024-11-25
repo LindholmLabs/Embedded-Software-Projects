@@ -68,6 +68,7 @@ void CLOCK_init (void);
 static void configure_USART3(void);
 void sendmsg (char *s);
 void configure_ADC0(void);
+void set_leds_output();
 void configure_EVSYS();
 void configure_TCA0();
 void configure_TCB0(void);
@@ -96,6 +97,7 @@ int main(void)
 
 	CLOCK_init();
 	configure_EVSYS();
+	set_leds_output();
 	configure_TCB0();
 	configure_TCB1();
     configure_USART3();
@@ -192,6 +194,19 @@ void CLOCK_init (void)
 	ccp_write_io( (void *) &CLKCTRL.MCLKCTRLB , (0 << CLKCTRL_PEN_bp));
 	/* If set from the fuses during programming, the CPU will now run at 20MHz (default is /6) */
 }
+
+
+/************************************************************************/
+/* Set all led pins to output mode                                      */
+/************************************************************************/
+void set_leds_output()
+{
+	PORTC.DIR = PIN6_bm | PIN5_bm | PIN4_bm;    // Set PORTC pin 4, 5 and 6 as output
+	PORTA.DIR = PIN3_bm | PIN2_bm | PIN1_bm | PIN0_bm;    // Set PORTA pin 0, 1, 2 and 3 as output
+	PORTB.DIR = PIN2_bm;    // Set PORTB pin 2 as output
+	PORTF.DIR = PIN5_bm | PIN4_bm;    // Set PORTF pin 4 and 5 as output
+}
+
 
 void configure_EVSYS()
 {
@@ -386,11 +401,11 @@ void print_available_commands()
 	sprintf(
 		str_buffer,
 		"Undefined instruction.\n"
-		"0 - 9 = Servo speed.\n"
-		"A/a = ADC value.\n"
-		"V/v = ADC voltage reading (mV).\n"
-		"M/m = Continuous ADC reporting (mV).\n"
-		"N/n = Stop ADC reporting.\n"
+		"0-9: Servo speed.\n"
+		"A/a: ADC value.\n"
+		"V/v: ADC voltage reading (mV).\n"
+		"M/m: Continuous ADC reporting (mV).\n"
+		"N/n: Stop ADC reporting.\n"
 	);
 	sendmsg(str_buffer);
 	
@@ -398,15 +413,20 @@ void print_available_commands()
 	
 	sprintf(
 	str_buffer,
-	"T/t = Report timer period (mS).\n"
-	"L/l = Report low pulse.\n"
-	"H/h = Report high pulse.\n"
-	"C/c Continuously report timer period.\n"
-	"E/e Stop continuously reporting timer period.\n"
+	"T/t: Report timer period (mS).\n"
+	"L/l: Report low pulse.\n"
+	"H/h: Report high pulse.\n"
+	"C/c: Continuous timer reporting.\n"
+	"E/e: Stop timer reporting.\n"
 	);
 	sendmsg(str_buffer);
 }
 
+// return correct timing for selected value
+// 0: stopped, 1: 1.0S per step, 2: 0.75S per step
+// 3: 0.5S per step, 4: 0.4S per step, 5: 0.25S per step
+// 6: 0.2S per step, 7: 0.15S per step, 8: 0.S per step, 9: 0.05S per step
+// Calculation performed: desired_wait / 5*10^-3 = count
 int16_t calculate_servo_move_threshold() 
 {
 	static const int16_t speed_values[] = {-1, 200, 150, 100, 80, 50, 40, 30, 20, 10};
@@ -453,6 +473,7 @@ ISR(TCB0_INT_vect)
 	// Received signal edge, meaning timer is not stopped
 	TIMER_STOPPED = false;
 	TIMER_READING_READY = true; // notify new reading available
+	LED_Array[6].LED_PORT->OUTCLR = LED_Array[6].bit_mapping; // turn off LED 6
 }
 
 
@@ -464,6 +485,7 @@ ISR(TCB1_INT_vect)
 	TCB1.INTFLAGS = 1; // Reset interrupt flag
 	TIMER_READING_READY = true; 
 	TIMER_STOPPED = true; // Timer has stopped since this timeout interrupt was called
+	LED_Array[6].LED_PORT->OUTSET = LED_Array[6].bit_mapping; // turn on LED 6
 }
 
 ISR(TCB2_INT_vect)
