@@ -10,6 +10,9 @@
 #define BAUD_RATE 115200
 #define QUEUE_SIZE 512
 
+#define MIN_SERVO_PW 
+#define MAX_SERVO_PW
+
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <avr/cpufunc.h>
@@ -49,10 +52,10 @@ bool ADC_READING_READY;
 uint16_t ADC_VALUE;
 
 /* 555 Timer related globals */
+bool TIMER_STOPPED;
 bool TIMER_READING_READY;
-uint16_t TCB0_HIGH_PULSE;
-uint16_t TCB0_LOW_PULSE;
-uint16_t TCB0_PERIOD;
+uint16_t TCB_FALLING_PULSE;
+uint16_t TCB_RISING_PULSE;
 
 /* Servo related globals */
 uint8_t SERVO_SPEED;
@@ -144,6 +147,8 @@ int main(void)
 					case 'E':
 					case 'e':
 						continuous_timer_reporting = false;
+						sprintf(str_buffer, "Stopped.\n");
+						sendmsg(str_buffer);
 						break;
 					case 'V': // print ADC voltage
 					case 'v':
@@ -156,7 +161,7 @@ int main(void)
 					case 'N': // Stop continuous reporting of ADC
 					case 'n':
 						continuous_adc_reporting = false;
-						sprintf(str_buffer, "Stopped\n");
+						sprintf(str_buffer, "Stopped.\n");
 						sendmsg(str_buffer);
 						break;
 					default:
@@ -327,7 +332,7 @@ bool queue_is_empty()
 /* Allows printing of ADC information                                   */
 /************************************************************************/
 
-// Print the current ADC volatage reading (mV)
+// Print the current ADC voltage reading (mV)
 void print_adc_voltage() 
 {
 	char	str_buffer[16];
@@ -351,21 +356,26 @@ void print_adc_value()
 void print_tcb0_low_pulse()
 {
 	char	str_buffer[16];
-	sprintf(str_buffer, "Low = %dmS\n", TCB0_LOW_PULSE);
+	sprintf(str_buffer, "Low = %dmS\n", (uint16_t)(TCB_FALLING_PULSE/10));
 	sendmsg(str_buffer);
 }
 
 void print_tcb0_high_pulse() 
 {
 	char	str_buffer[16];
-	sprintf(str_buffer, "High = %dmS\n", TCB0_HIGH_PULSE);
+	sprintf(str_buffer, "High = %dmS\n", (uint16_t)((TCB_RISING_PULSE - TCB_FALLING_PULSE)/10));
 	sendmsg(str_buffer);
 }
 
 void print_tcb0_timer_period()
 {
 	char	str_buffer[16];
-	sprintf(str_buffer, "Timer = %dmS\n", TCB0_PERIOD);
+	
+	if (TIMER_STOPPED)
+		sprintf(str_buffer, "Timer = Stopped\n");
+	else
+		sprintf(str_buffer, "Timer = %dmS\n", (uint16_t)(TCB_RISING_PULSE/10));
+		
 	sendmsg(str_buffer);
 }
 
@@ -376,7 +386,7 @@ void print_available_commands()
 	sprintf(
 		str_buffer,
 		"Undefined instruction.\n"
-		"0 - 9 = Servo speed\n"
+		"0 - 9 = Servo speed.\n"
 		"A/a = ADC value.\n"
 		"V/v = ADC voltage reading (mV).\n"
 		"M/m = Continuous ADC reporting (mV).\n"
@@ -388,11 +398,11 @@ void print_available_commands()
 	
 	sprintf(
 	str_buffer,
-	"T/t = Report timer period (mS)\n"
-	"L/l = Report low pulse\n"
-	"H/h = Report high pulse\n"
-	"C/c Continuously report timer period\n"
-	"E/e Stop continuously reporting timer period\n"
+	"T/t = Report timer period (mS).\n"
+	"L/l = Report low pulse.\n"
+	"H/h = Report high pulse.\n"
+	"C/c Continuously report timer period.\n"
+	"E/e Stop continuously reporting timer period.\n"
 	);
 	sendmsg(str_buffer);
 }
@@ -417,6 +427,7 @@ ISR(USART3_TXC_vect)
 	 }
 }
 
+
 /************************************************************************/
 /* ADC0 result ready ISR (handle voltage reading measurements)          */
 /************************************************************************/
@@ -428,32 +439,36 @@ ISR(ADC0_RESRDY_vect)
 }
 
 
+/************************************************************************/
+/* Interrupt for signal edge on 555 timer input                         */
+/************************************************************************/
 ISR(TCB0_INT_vect)
 {
 	TCB0.INTFLAGS = 1; // Reset interrupt flag
-	uint16_t ccmp = TCB0.CCMP;
-	uint16_t cnt = TCB0.CNT;
 	
-	// 1 / 1MHz = 0.1uS per tick
-	TCB0_PERIOD = 0.1 * cnt; // calculate timer period in uS 
-	
-	TCB0_LOW_PULSE = 0.1 * ccmp;
-	TCB0_HIGH_PULSE = 0.1 * (cnt - ccmp);
-	
-	TIMER_READING_READY = true;
+	// Store timings in global scope
+	TCB_FALLING_PULSE = TCB0.CCMP;
+	TCB_RISING_PULSE = TCB0.CNT;
+
+	// Received signal edge, meaning timer is not stopped
+	TIMER_STOPPED = false;
+	TIMER_READING_READY = true; // notify new reading available
 }
 
+
+/************************************************************************/
+/* Timeout check interrupt for 555 timer                                */
+/************************************************************************/
 ISR(TCB1_INT_vect)
 {
 	TCB1.INTFLAGS = 1; // Reset interrupt flag
-	char	str_buffer[16];
-	sprintf(str_buffer, "STOPPED\n");
-	sendmsg(str_buffer);
+	TIMER_READING_READY = true; 
+	TIMER_STOPPED = true; // Timer has stopped since this timeout interrupt was called
 }
 
 ISR(TCB2_INT_vect)
 {
-	TCB2.INTFLAGS = 1; // clear interrupt flag
+	TCB2.INTFLAGS = 1;  // Reset interrupt flag
 
 	static uint16_t sw_counter = 0; // software counter, decides when to increment desired_pos
 	static uint8_t desired_pos = 0; // (value: 0 - 25)
@@ -477,11 +492,9 @@ ISR(TCB2_INT_vect)
 	if (threshold == -1) { // no movement
 		return;
 	} 
-	else if (sw_counter > threshold)
+	
+	if (sw_counter > threshold) // if designated time has passed, move to next position
 	{
-		char	str_buffer[16];
-		sprintf(str_buffer, "to %lu\n", desired_step);
-		sendmsg(str_buffer);
 		sw_counter = 0;
 		desired_pos += direction;
 	}
