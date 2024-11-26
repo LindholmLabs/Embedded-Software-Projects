@@ -10,7 +10,10 @@
 #define BAUD_RATE 115200
 #define QUEUE_SIZE 512
 
+// Precalculated constants
 #define ADC_35V 716 // ((2^10)-1)*(3.5V/5V) = 716.1
+#define TIMER_200uS 2000 // (200*10^-6)/(1/(10*10^6)) = 2000
+#define TIMER_300uS 3000 // (300*10^-6)/(1/(10*10^6)) = 3000
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -254,7 +257,7 @@ void configure_TCB0()
 {
 	// Event on falling edge to increase resolution for high pulse
 	TCB0.CTRLA = TCB_CLKSEL_CLKDIV2_gc | TCB_ENABLE_bm; // Select CLK_PER/2 source and enable
-	TCB0.CTRLB = TCB_CNTMODE_FRQPW_gc; // Set mode to PW measurment mode
+	TCB0.CTRLB = TCB_CNTMODE_FRQPW_gc; // Set mode to PW measurement mode
 	TCB0.INTCTRL = TCB_CAPT_bm; // Capture Interrupt Enable
 	TCB0.EVCTRL = (1<<TCB_EDGE_bp) | (1<<TCB_CAPTEI_bp); // Event on falling edge & enable capture event input
 }
@@ -477,6 +480,17 @@ ISR(TCB0_INT_vect)
 	// Received signal edge, meaning timer is not stopped
 	TIMER_STOPPED = false;
 	TIMER_READING_READY = true; // notify new reading available
+	
+	if (TCB_RISING_PULSE > TIMER_200uS)
+		LED_Array[4].LED_PORT->OUTSET = LED_Array[4].bit_mapping; // turn on LED 4
+	else
+		LED_Array[4].LED_PORT->OUTCLR = LED_Array[4].bit_mapping; // turn off LED 4
+		
+	if (TCB_RISING_PULSE > TIMER_300uS)
+		LED_Array[5].LED_PORT->OUTSET = LED_Array[5].bit_mapping; // turn on LED 5
+	else
+		LED_Array[5].LED_PORT->OUTCLR = LED_Array[5].bit_mapping; // turn off LED 5
+		
 	LED_Array[6].LED_PORT->OUTCLR = LED_Array[6].bit_mapping; // turn off LED 6
 }
 
@@ -499,7 +513,12 @@ ISR(TCB2_INT_vect)
 	static uint16_t sw_counter = 0; // software counter, decides when to increment desired_pos
 	static uint8_t desired_pos = 0; // (value: 0 - 25)
 	static uint32_t desired_step;
-	desired_step = 700 + ((2700 * (uint32_t)desired_pos)/25); // calculate next desired step (value: 1250-2500)
+	
+	// calculate next desired step 
+	// 1250-2500 (1-2mS) should be correct according to datasheet of SG90 servo, 
+	// I found however that this results in less than 45 deg of range
+	// 700-3400 () results in the highest range according to my testing.
+	desired_step = 700 + ((2700 * (uint32_t)desired_pos) / 25); // 25 steps
 	static int8_t direction = 1;
 	
 	sw_counter++;
