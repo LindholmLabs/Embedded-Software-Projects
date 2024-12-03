@@ -25,10 +25,6 @@
 #include <stdbool.h>
 #include <ctype.h>
 
-
-/// TODO
-// ENABLE EVENT CONTROLLED START CONVERSION FOR ADC
-
 /************************************************************************/
 /* Globals                                                              */
 /************************************************************************/
@@ -154,7 +150,7 @@ int main(void)
 						sprintf(str_buffer, "Stopped.\n");
 						sendmsg(str_buffer);
 						break;
-					case 'V': // print ADC voltage
+					case 'V':
 					case 'v':
 						print_adc_voltage();
 						break;
@@ -173,17 +169,20 @@ int main(void)
 						break;
 				}
 			}
-			
 		}
 		
 		// Continuous reporting
 		if (continuous_adc_reporting && ADC_READING_READY && queue_is_empty())
 		{
+			// Given that continuous ADC reporting is enabled,
+			// there is new data, and the output queue is empty, print new measurment
 			print_adc_voltage();
 			ADC_READING_READY = false;
 		}
 		if (continuous_timer_reporting && TIMER_READING_READY && queue_is_empty())
 		{
+			// Given that continuous timer reporting is enabled,
+			// there is new data, and the output queue is empty, print new measurment
 			print_tcb0_timer_period();
 			TIMER_READING_READY = false;
 		}
@@ -210,6 +209,9 @@ void set_leds_output()
 }
 
 
+/************************************************************************/
+/* Enable and Configure event system                                    */
+/************************************************************************/
 void configure_EVSYS()
 {
 	// Set TCB0 to measure PW from PE3
@@ -222,6 +224,9 @@ void configure_EVSYS()
 	EVSYS.USERADC0 = EVSYS_CHANNEL_CHANNEL2_gc;
 }
 
+/************************************************************************/
+/* Enable and Configure USART for communication over USB                */
+/************************************************************************/
 static void configure_USART3(void)
 {
 	// Assign the USART3 transmit complete interrupt high priority (1)
@@ -289,6 +294,9 @@ void configure_TCB2()
 	TCB2.CCMP = 50000; // (5*10^-3)/(1/(10*10^6)) = 50000 -> 5mS
 }
 
+/************************************************************************/
+/* Enable and configure TCA0 for PWM output                             */
+/************************************************************************/
 void configure_TCA0()
 {
 	TCA0.SINGLE.CTRLA = TCA_SINGLE_CLKSEL_DIV16_gc; // Set clock to clock peripheral with div 16 prescaler
@@ -297,7 +305,6 @@ void configure_TCA0()
 	TCA0.SINGLE.CMP0 = 1250; // Set to 1mS, -90 deg
 	TCA0.SINGLE.CTRLA |= TCA_SINGLE_ENABLE_bm; // Enable TCA0
 	PORTA.DIRSET = PIN0_bm; // Set PA0 as output
-	
 }
 
 /*this function loads the queue and */
@@ -312,10 +319,11 @@ void sendmsg (char *s)
 		temp++;
 		msg_len++;
 	}
-		
+	
+	// Calculate the available space in the circular buffer
 	uint8_t available_space = (sndcntr > qcntr) ? (sndcntr - qcntr - 1) : (QUEUE_SIZE - qcntr + sndcntr - 1);
 	
-	if (msg_len > available_space) // prevent it from adding any more to the buffer if its full.
+	if (msg_len > available_space) // prevent it from adding any more to the buffer if its full. (if message is longer than remaining space)
 		return;
 	
 	// Send message with circular buffer
@@ -506,24 +514,28 @@ ISR(TCB1_INT_vect)
 	LED_Array[6].LED_PORT->OUTSET = LED_Array[6].bit_mapping; // turn on LED 6
 }
 
+/************************************************************************/
+/* TCB2 ISR for servo control                                           */
+/************************************************************************/
 ISR(TCB2_INT_vect)
 {
+	// Configured to run every 5ms
 	TCB2.INTFLAGS = 1;  // Reset interrupt flag
 
 	static uint16_t sw_counter = 0; // software counter, decides when to increment desired_pos
-	static uint8_t desired_pos = 0; // (value: 0 - 25)
+	static uint8_t desired_pos = 0; // (value: 0 - 24)
 	static uint32_t desired_step;
 	
 	// calculate next desired step 
 	// 1250-2500 (1-2mS) should be correct according to datasheet of SG90 servo, 
 	// I found however that this results in less than 45 deg of range
-	// 700-3400 () results in the highest range according to my testing.
-	desired_step = 700 + ((2700 * (uint32_t)desired_pos) / 25); // 25 steps
+	// 700-3400 (0.56mS-2.72mS high pulse) results in the highest range according to my testing.
+	desired_step = 700 + ((2700 * (uint32_t)desired_pos) / 24); // 25 steps (including step 0)
 	static int8_t direction = 1;
 	
 	sw_counter++;
 	
-	if (desired_pos == 25)
+	if (desired_pos == 24)
 	{
 		direction = -1;
 	} 
