@@ -348,8 +348,13 @@ void sendmsg (char *s)
     }
 }
 
+/************************************************************************/
+/* Check if send queue is empty                                         */
+/************************************************************************/
 bool queue_is_empty()
 {
+	// Compare if the send counter has caught up to the queue counter,
+	// if it has, everything has been sent.
 	return (qcntr == sndcntr);
 }
 
